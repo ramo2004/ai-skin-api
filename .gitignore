@@ -14,3 +14,7 @@ __pycache__/
 # Ignore Docker-related files if using Docker
 docker-compose.yml
 .Dockerfile
+
+venv/
+*.dylib
+*.so
