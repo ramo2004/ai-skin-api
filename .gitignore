@@ -15,6 +15,14 @@ __pycache__/
 docker-compose.yml
 .Dockerfile
 
+# Ignore virtual environments
 venv/
 *.dylib
 *.so
+*.whl
+*.bin
+*.tar.gz
+
+# Ignore compiled TensorFlow libraries
+venv/lib/python3.10/site-packages/tensorflow/
+venv/lib/python3.10/site-packages/clang/
