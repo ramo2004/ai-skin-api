@@ -7,7 +7,7 @@ WORKDIR /app
 # Copy only the requirements file first to leverage Docker caching
 COPY requirements.txt /app/
 
-# Install dependencies before copying the full application (optimizes build speed)
+# Install dependencies 
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
