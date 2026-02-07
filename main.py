@@ -1,67 +1,66 @@
-from fastapi import FastAPI, HTTPException, Request
-import tensorflow.lite as tflite
-import numpy as np
-import uvicorn
-from PIL import Image
+import firebase_admin
+from firebase_admin import auth as firebase_auth
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, Header
+from typing import Optional
+from gpt_service import classify_image
 from fastapi.middleware.cors import CORSMiddleware
-import io
-import requests  # ✅ Import to fetch image from Firebase URL
+
+# Initialize Firebase Admin
+# Note: In production, pass credentials from a service account JSON file
+# For token verification only, initialize_app() is often sufficient if project ID can be inferred
+try:
+    firebase_admin.initialize_app()
+except ValueError:
+    # Already initialized
+    pass
 
 app = FastAPI()
 
-# ✅ Allow all origins (for now, restrict later)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change "*" to specific domains later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Load TensorFlow Lite Model
-interpreter = tflite.Interpreter(model_path="acne_model.tflite")
-interpreter.allocate_tensors()
-
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
-
-def preprocess_image(image_bytes):
-    """Preprocess image to match model input shape"""
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image = image.resize((224, 224))  # Resize to model input shape
-    img_array = np.array(image).astype(np.float32) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-    return img_array
-
-@app.post("/classify")
-async def classify_image(request: Request):
-    """Accepts an image URL from Firebase and classifies it."""
+async def get_current_user(authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    
+    token = authorization.split("Bearer ")[1]
     try:
-        data = await request.json()
-        image_url = data.get("image_url")
+        decoded_token = firebase_auth.verify_id_token(token)
+        return decoded_token
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
-        if not image_url:
-            raise HTTPException(status_code=400, detail="Missing image_url")
-
-        # ✅ Download image from Firebase URL
-        response = requests.get(image_url)
-        if response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to fetch image")
-
-        img_array = preprocess_image(response.content)
-
-        # ✅ Run inference
-        interpreter.set_tensor(input_details[0]['index'], img_array)
-        interpreter.invoke()
-        prediction = interpreter.get_tensor(output_details[0]['index'])
-
-        acne_classes = ["Blackheads", "Whiteheads", "Papules", "Pustules", "Nodules", "Cysts"]
-        predicted_label = acne_classes[np.argmax(prediction)]
-
-        return {"classification": predicted_label, "confidence": float(np.max(prediction))}
-
+@app.post("/classify/")
+async def classify(
+    file: UploadFile = File(...),
+    age: Optional[str] = Form(None),
+    gender: Optional[str] = Form(None),
+    skin_type: Optional[str] = Form(None),
+    scan_type: str = Form("face"), # Default to face for backward compatibility
+    user: dict = Depends(get_current_user)
+):
+    contents = await file.read()
+    
+    # Common User Context
+    user_context = {
+        "age": age,
+        "gender": gender,
+        "skin_type": skin_type
+    }
+    
+    # Route based on scan_type
+    if scan_type == "product":
+        from gpt_service import analyze_ingredients
+        result = await analyze_ingredients(contents, file.filename, user_context)
+        return {"type": "product", "result": result}
+    
+    try:
+        result = await classify_image(contents, file.filename, user_context)
+        return {"type": "face", "classification": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
