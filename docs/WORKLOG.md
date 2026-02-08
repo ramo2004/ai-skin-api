@@ -32,3 +32,10 @@
 - https://platform.openai.com/docs/models/gpt-5.1
 - https://platform.openai.com/docs/guides/images-vision
 - https://platform.openai.com/docs/models
+
+### Firebase Auth Verification Fix (2026-02-07)
+- Backend Firebase Admin init now reads optional `FIREBASE_PROJECT_ID` from env and initializes with `projectId` option.
+- This prevents token audience/project mismatch when verifying Firebase ID tokens in local environments.
+
+#### Verification
+- `python3 -m py_compile main.py gpt_service.py` -> passed

@@ -4,12 +4,20 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, Hea
 from typing import Optional
 from gpt_service import classify_image
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import os
+
+load_dotenv(".env")
 
 # Initialize Firebase Admin
 # Note: In production, pass credentials from a service account JSON file
 # For token verification only, initialize_app() is often sufficient if project ID can be inferred
 try:
-    firebase_admin.initialize_app()
+    firebase_project_id = os.getenv("FIREBASE_PROJECT_ID")
+    if firebase_project_id:
+        firebase_admin.initialize_app(options={"projectId": firebase_project_id})
+    else:
+        firebase_admin.initialize_app()
 except ValueError:
     # Already initialized
     pass
